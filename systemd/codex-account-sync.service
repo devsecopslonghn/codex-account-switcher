@@ -1,0 +1,12 @@
+[Unit]
+Description=Synchronize Codex accounts with the OmniRoute credential vault
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/codex-account sync-all
+UMask=0077
+NoNewPrivileges=true
+# Configure a noninteractive credential helper in ~/.codex-accounts/config.json.
+# Never put a token in this unit or in ExecStart arguments.

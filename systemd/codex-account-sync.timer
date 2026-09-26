@@ -1,0 +1,11 @@
+[Unit]
+Description=Synchronize Codex accounts approximately every ten minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Unit=codex-account-sync.service
+
+[Install]
+WantedBy=timers.target
