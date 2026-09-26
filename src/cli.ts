@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import os from "node:os";
+import { readFile } from "node:fs/promises";
 import { checkCodexConfig, loadConfig } from "./config.js";
 import { safeError, AppError } from "./domain/errors.js";
 import { Store } from "./local/store.js";
@@ -15,7 +16,10 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "--version") {
-    process.stdout.write("1.0.0\n");
+    const metadata = JSON.parse(
+      await readFile(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { version: string };
+    process.stdout.write(`${metadata.version}\n`);
     return;
   }
   if (

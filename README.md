@@ -23,7 +23,26 @@ File-based OAuth authentication is required. Keyring, auto, ephemeral, API-key, 
 
 We do not use an auth symlink: Codex may atomically replace its auth file during refresh, breaking a symlink-based switch scheme. The utility rejects symlinked/hardlinked credential files and symlinked state/Codex directories.
 
-## Install
+## Install from a release (no source build)
+
+Download the prebuilt `.tgz` and `SHA256SUMS` from [GitHub Releases](https://github.com/longhn0710/codex-account-switcher/releases). The repository is private: sign in with an account that has repository access. Node.js 22.13+ or 24+, npm, Linux `/proc`, and util-linux `flock` are still required; Node itself is not bundled.
+
+For example, using an authenticated GitHub CLI:
+
+```sh
+mkdir -p "$HOME/Downloads/codex-account-v1.0.0"
+cd "$HOME/Downloads/codex-account-v1.0.0"
+gh release download v1.0.0 --repo longhn0710/codex-account-switcher \
+  --pattern 'codex-account-switcher-*.tgz' --pattern SHA256SUMS
+sha256sum --check SHA256SUMS
+npm install --offline --ignore-scripts --global --prefix "$HOME/.local" ./codex-account-switcher-1.0.0.tgz
+export PATH="$HOME/.local/bin:$PATH"
+codex-account --version
+```
+
+The package includes compiled JavaScript and its runtime dependency. Installation needs no npm registry connection or build tools. You can also download the same two assets in the browser and run the checksum/install commands in that directory. Use the release asset, not GitHub's automatically generated source archives. Continue with the OmniRoute credential setup below; installation never changes your Codex auth or enables automation.
+
+## Install from source
 
 ```sh
 git clone https://github.com/longhn0710/codex-account-switcher.git
@@ -209,4 +228,8 @@ For real verification, stop Codex and other token consumers first. Bootstrap the
 - `CHANGED`: another process changed active auth; retry `sync` after it settles. `CONFLICT` requires the investigation described above.
 - `COMMITTED`: inspect `current`; replacement may already be complete. Use offline rollback if needed, then reconcile remote state.
 
-When upgrading, disable the timer, finish any active operation, update the checkout, run `npm ci && npm run check`, reinstall the local package, review the pinned upstream contract, and run `doctor` before re-enabling. State version 1 is explicit; unknown versions fail closed rather than discarding metadata. Keep credential backups outside git and review state migration instructions for future releases.
+When upgrading, disable the timer and finish any active operation. Download and verify the new release package, then repeat the offline installation with its filename. For a source installation, update the checkout, run `npm ci && npm run check`, and reinstall. Review the pinned upstream contract and run `doctor` before re-enabling automation. State version 1 is explicit; unknown versions fail closed rather than discarding metadata. Keep credential backups outside git and review state migration instructions for future releases.
+
+## Publishing releases
+
+Pushing an annotated `vMAJOR.MINOR.PATCH` tag triggers the Release workflow. It checks the version, runs quality checks, builds a clean package, verifies offline installation with an empty npm cache, and publishes the `.tgz` plus `SHA256SUMS`. See [release maintenance](docs/releases.md) for versioning, manual runs, and recovery.

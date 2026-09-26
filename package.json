@@ -20,10 +20,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "lint": "eslint src test",
-    "format": "prettier --write src test *.json *.mjs README.md docs .github",
-    "format:check": "prettier --check src test *.json *.mjs README.md docs .github",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build"
+    "lint": "eslint src test scripts",
+    "format": "prettier --write src test scripts *.json *.mjs README.md docs .github",
+    "format:check": "prettier --check src test scripts *.json *.mjs README.md docs .github",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
+    "release:pack": "node scripts/package-release.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
@@ -36,5 +37,8 @@
   "dependencies": {
     "smol-toml": "^1.9.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "bundleDependencies": [
+    "smol-toml"
+  ]
 }
