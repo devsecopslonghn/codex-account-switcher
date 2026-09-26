@@ -1,0 +1,36 @@
+{
+  "name": "codex-account-switcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secure account switching for official Codex using OmniRoute as a credential vault",
+  "type": "module",
+  "bin": {
+    "codex-account": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "systemd",
+    "README.md",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "lint": "eslint src test",
+    "format": "prettier --write src test *.json *.mjs README.md docs systemd .github",
+    "format:check": "prettier --check src test *.json *.mjs README.md docs .github",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1"
+  }
+}
