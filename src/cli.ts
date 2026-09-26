@@ -9,7 +9,8 @@ import { Engine } from "./sync/engine.js";
 import { current, doctor, list } from "./commands.js";
 import { safeOutput } from "./output.js";
 import { isConfigured, setupInteractive } from "./setup.js";
-const help = `codex-account — official Codex OAuth account manager\n\nCommands:\n  setup            Save URL and admin token in an encrypted local vault\n  list             List OmniRoute Codex OAuth accounts\n  current          Show active local identity and sync status\n  sync             Push authoritative active auth to OmniRoute\n  sync-all         Push active auth; pull inactive account caches\n  use <selector>   Switch by unique ID, ID prefix, name, or email\n  rollback         Restore latest valid distinct backup (offline)\n  doctor           Check configuration, auth, permissions, connectivity, locks\n\nOnly ~/.codex/auth.json switches. Close Codex before use/rollback.\nRun codex-account setup once; later commands reuse a session key, or ask for the vault passphrase.\nExplicit credential helpers and secret-manager environment injection also work.\nNo token command-line arguments are accepted. See README for setup.\n`;
+const help = `codex-account — official Codex OAuth account manager\n\nCommands:\n  setup                      Save URL and admin token in an encrypted local vault\n  list                       List OmniRoute Codex OAuth accounts\n  current                    Show active local identity and sync status\n  sync                       Push authoritative active auth to OmniRoute\n  sync-all                   Push active auth; pull inactive account caches\n  use <selector> [--force]   Switch by unique ID, ID prefix, name, or email\n  rollback                   Restore latest valid distinct backup (offline)\n  doctor                     Check configuration, auth, permissions, connectivity, locks\n\nOnly ~/.codex/auth.json switches. Close Codex before use/rollback.\nUse --force only if you accept that running Codex processes may retain or overwrite old credentials; restart them after switching.\nRun codex-account setup once; later commands reuse a session key, or ask for the vault passphrase.\nExplicit credential helpers and secret-manager environment injection also work.\nNo token command-line arguments are accepted. See README for setup.\n`;
+const useHelp = `Usage: codex-account use <selector> [--force]\n\nChoose a connection by full ID, unique ID prefix, name, or email. Use the full ID to avoid ambiguity.\nNormally all Codex CLI and IDE processes must be closed first.\n--force bypasses only the running-process check. A live Codex process may continue using the old account or refresh and overwrite auth.json after the switch. Restart all Codex sessions immediately afterward. File, identity, lock, and backup checks still apply.\n`;
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   if (command === "--help" || command === "help") {
@@ -23,6 +24,10 @@ async function main(): Promise<void> {
     process.stdout.write(`${metadata.version}\n`);
     return;
   }
+  if (command === "use" && args.length === 1 && args[0] === "--help") {
+    process.stdout.write(useHelp);
+    return;
+  }
   const home = os.homedir();
   if (!command) {
     if (await isConfigured(home)) process.stdout.write(help);
@@ -33,6 +38,9 @@ async function main(): Promise<void> {
     process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
     return;
   }
+  const force = command === "use" && args.includes("--force");
+  const selectors =
+    command === "use" ? args.filter((arg) => arg !== "--force") : [];
   if (
     ![
       "list",
@@ -44,7 +52,9 @@ async function main(): Promise<void> {
       "doctor",
     ].includes(command) ||
     (command === "use"
-      ? args.length !== 1 || args[0]!.startsWith("-")
+      ? selectors.length !== 1 ||
+        selectors[0]!.startsWith("-") ||
+        args.length !== selectors.length + Number(force)
       : args.length !== 0)
   )
     throw new AppError("CONFIG");
@@ -96,7 +106,7 @@ async function main(): Promise<void> {
   const engine = new Engine(store, vault),
     r =
       command === "use"
-        ? await engine.use(args[0]!)
+        ? await engine.use(selectors[0]!, force)
         : await engine.sync(command === "sync-all");
   process.stdout.write(safeOutput(r) + "\n");
   if (r.failures?.length) process.exitCode = 1;

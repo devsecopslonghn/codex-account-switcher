@@ -147,6 +147,33 @@ test("Codex process at start or immediately before replace prevents switching", 
   );
   assert.equal(await f.store.activeRaw(), raw);
 });
+test("explicit force skips only the running-process guard and reports the live-session risk", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const engine = new Engine(f.store, f.client, async () => true);
+  const result = await engine.use("B", true);
+  assert.equal(result.action, "use");
+  assert.equal(result.connectionId, "B");
+  assert.match(result.warnings.join("\n"), /FORCED_SWITCH.*Restart/);
+  assert.equal(parseAuth((await f.store.activeRaw())!).identity.userId, "b");
+  assert.ok((await f.store.backups()).length > 0);
+});
+test("force still rejects a concurrent change to active auth", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const rotated = fakeAuth("a", 2);
+  f.server.beforeExport = async () => {
+    await fs.writeFile(f.store.authPath, serialize(rotated));
+  };
+  await assert.rejects(
+    new Engine(f.store, f.client, async () => true).use("B", true),
+    code("CHANGED"),
+  );
+  assert.equal(
+    parseAuth((await f.store.activeRaw())!).fingerprint,
+    rotated.fingerprint,
+  );
+});
 test("atomic rename fault cleans staging and leaves original auth valid", async (t) => {
   const f = await setup({
     beforeRename: async () => {

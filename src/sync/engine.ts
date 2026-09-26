@@ -18,14 +18,19 @@ export interface Report {
   warnings: string[];
   failures?: { connectionId: string; error: string }[];
 }
+const runningWarning =
+  "FORCED_SWITCH: Running Codex processes may keep the previous account in memory or later refresh and overwrite auth.json. Restart all Codex CLI and IDE sessions before using the selected account.";
 export class Engine {
   constructor(
     readonly store: Store,
     readonly vault: Vault,
     readonly running: () => Promise<boolean> = codexRunning,
   ) {}
-  private async stopped(): Promise<void> {
-    if (await this.running()) throw new AppError("PROCESS_RUNNING");
+  private async stopped(force = false, warnings?: string[]): Promise<void> {
+    if (!(await this.running())) return;
+    if (!force) throw new AppError("PROCESS_RUNNING");
+    if (warnings && !warnings.includes(runningWarning))
+      warnings.push(runningWarning);
   }
   private async locked<T>(fn: () => Promise<T>): Promise<T> {
     const release = await this.store.lock();
@@ -161,14 +166,14 @@ export class Engine {
     await this.store.saveState(state);
     return a;
   }
-  async use(selector: string): Promise<Report> {
+  async use(selector: string, force = false): Promise<Report> {
     return this.locked(async () => {
-      await this.stopped();
+      const warnings: string[] = [];
+      await this.stopped(force, warnings);
       const raw = await this.store.activeRaw();
       if (raw !== undefined) parseAuth(raw);
       const connections = await this.vault.list(),
-        state = await this.store.state(),
-        warnings: string[] = [];
+        state = await this.store.state();
       // Resolve selector before remote mutations; every selected identity must be unique.
       const target = select(connections, selector);
       if (!target.identity) throw new AppError("NOT_FOUND");
@@ -199,7 +204,9 @@ export class Engine {
         throw new AppError("REFRESH_FAILED");
       await this.unchanged(raw);
       if (raw !== undefined) await this.store.backup(raw);
-      await this.store.replace(serialize(auth), raw, () => this.stopped());
+      await this.store.replace(serialize(auth), raw, () =>
+        this.stopped(force, warnings),
+      );
       try {
         if (active && state.accounts[active.id])
           state.accounts[active.id]!.status = "AVAILABLE";

@@ -84,15 +84,15 @@ The credential needs read access to list providers and admin access for POST imp
 
 All command reports are structured JSON containing only selected metadata; errors have stable category codes and static messages. Exit status is zero for success, one for failure, partial `sync-all` failure, or an unhealthy `doctor`. Conflict warnings on an authoritative active push are reported but do not block that push.
 
-| Command                        | Behavior                                                                                                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codex-account list`           | List Codex OAuth connections; determine active account from actual local identity.                                                                                                 |
-| `codex-account current`        | Validate local auth; show user/workspace, email, expiry, remote match, and synchronization status. Still works with a remote warning when offline.                                 |
-| `codex-account sync`           | Cache and import the active local session with overwrite semantics. Never export or replace active auth.                                                                           |
-| `codex-account sync-all`       | Push active credentials first, then export inactive accounts into their caches.                                                                                                    |
-| `codex-account use <selector>` | Switch using an exact connection ID, unique ID prefix, or unique case-insensitive name/email.                                                                                      |
-| `codex-account rollback`       | Restore the most recent valid distinct backup, without loading management credentials or contacting OmniRoute.                                                                     |
-| `codex-account doctor`         | Check home, local file/auth configuration, private file permissions, kernel lock availability, management config/auth/connectivity, strong identity/conflict, and Codex processes. |
+| Command                                  | Behavior                                                                                                                                                                           |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codex-account list`                     | List Codex OAuth connections; determine active account from actual local identity.                                                                                                 |
+| `codex-account current`                  | Validate local auth; show user/workspace, email, expiry, remote match, and synchronization status. Still works with a remote warning when offline.                                 |
+| `codex-account sync`                     | Cache and import the active local session with overwrite semantics. Never export or replace active auth.                                                                           |
+| `codex-account sync-all`                 | Push active credentials first, then export inactive accounts into their caches.                                                                                                    |
+| `codex-account use <selector> [--force]` | Switch using an exact connection ID, unique ID prefix, or unique case-insensitive name/email. `--force` opts into switching while Codex is running.                                |
+| `codex-account rollback`                 | Restore the most recent valid distinct backup, without loading management credentials or contacting OmniRoute.                                                                     |
+| `codex-account doctor`                   | Check home, local file/auth configuration, private file permissions, kernel lock availability, management config/auth/connectivity, strong identity/conflict, and Codex processes. |
 
 Exact connection IDs take precedence over names. Ambiguous selectors and duplicate strong identities are rejected. Selecting the already-active account only synchronizes it; it never exports or replaces it. The utility can activate a first account if `auth.json` is absent and the normal Codex directory already exists. It refuses to switch away from a malformed or unmapped current auth; use offline rollback or repair the session first.
 
@@ -100,7 +100,9 @@ States include `ACTIVE_LOCAL`, `AVAILABLE`, `STALE`, `CONFLICT`, `REAUTH_REQUIRE
 
 ## Switching and token rotation
 
-Close all Codex CLI, IDE extension/app-server, and desktop Codex processes before `use` or `rollback`. There is no force mode. The detector checks current-user Linux processes, including a parent Codex agent. Running `use` from a tool shell inside Codex is expected to be refused. Run it in a normal terminal after closing Codex.
+Close all Codex CLI, IDE extension/app-server, and desktop Codex processes before `use` or `rollback`. The detector checks current-user Linux processes, including a parent Codex agent. Running `use` from a tool shell inside Codex is expected to be refused. Use `codex-account use --help` for the full syntax.
+
+If closing Codex is impractical, `codex-account use <ID> --force` bypasses **only** the running-process check. It still verifies the active file, remote identities, lock, backup, and exact file bytes before replacement. A live Codex process may retain the old account in memory or refresh and overwrite `auth.json` after the switch, so this mode cannot guarantee which account that process uses. Restart every Codex CLI and IDE session immediately after a forced switch and run `codex-account current` again. `rollback` has no force option.
 
 A switch acquires the exclusive kernel lock, checks processes, validates the current auth and target selector, saves current auth to its connection-ID cache, and imports it to OmniRoute. It then exports the target, validates its structure and workspace-plus-user identity, caches it, and makes a secure backup of current auth. Only after these steps does it replace active auth. A final process check and exact comparison with the originally read bytes guard against intervening rotations.
 
@@ -201,7 +203,7 @@ For real verification, stop Codex and other token consumers first. Run interacti
 - `FILESYSTEM`: check modes/ownership and regular files; use a local filesystem. Resolve symlink/hardlink setups deliberately. Do not loosen permissions to work around it.
 - `VAULT_LOCKED`: run `codex-account list` in an interactive terminal to unlock the encrypted vault. `VAULT_UNLOCK_FAILED` means the passphrase was rejected three times; retry carefully. `VAULT_CORRUPT` means the vault file is missing or damaged; restore your backup or rerun `setup` with a valid admin token.
 - `NOT_FOUND` / `AMBIGUOUS`: repair missing user metadata or duplicate server connections using trusted OmniRoute tools. Email matching alone cannot fix it.
-- `PROCESS_RUNNING`: fully close Codex and its IDE/app-server processes; run from an ordinary terminal. There is no force override.
+- `PROCESS_RUNNING`: close Codex and its IDE/app-server processes. For `use` only, `--force` bypasses this check with the live-session risk described above; restart Codex afterward.
 - `AUTHENTICATION` / `AUTHORIZATION`: renew the management credential or grant the required scope. Ordinary inference-only keys do not authorize management.
 - `REAUTH_REQUIRED` / `REFRESH_FAILED`: reauthenticate that account; leave active auth intact. An export may have attempted a server refresh; do not blindly repeat it.
 - `UNAVAILABLE` / `PROTOCOL`: check TLS/server reachability and the pinned API contract. No automatic credential refresh retry occurs.

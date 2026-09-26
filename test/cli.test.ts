@@ -42,3 +42,28 @@ test("actual CLI list/current/sync/sync-all use fake HTTP and a temporary home",
   assert.match(offline.stdout, /UNAVAILABLE/);
   assert.match(offline.stdout, /ACTIVE_LOCAL/);
 });
+test("CLI exposes use help and accepts force before or after the selector", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const env = {
+    PATH: process.env.PATH,
+    HOME: f.home,
+    OMNIROUTE_URL: f.server.url,
+    OMNIROUTE_MANAGEMENT_TOKEN: "FAKE_MANAGEMENT_SECRET",
+  };
+  const cli = (...args: string[]) =>
+    run(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
+      env,
+      timeout: 10000,
+    });
+  assert.match((await cli("use", "--help")).stdout, /--force/);
+  assert.equal(
+    JSON.parse((await cli("use", "B", "--force")).stdout).connectionId,
+    "B",
+  );
+  assert.equal(
+    JSON.parse((await cli("use", "--force", "A")).stdout).connectionId,
+    "A",
+  );
+  await assert.rejects(cli("use", "B", "--force", "--force"));
+});

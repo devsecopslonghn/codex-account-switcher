@@ -53,7 +53,7 @@ const messages: Record<ErrorCode, string> = {
   LOCKED:
     "Another account operation holds the lock. Wait for it to finish; do not delete the lock file.",
   PROCESS_RUNNING:
-    "Codex appears to be running. Close CLI and IDE Codex processes before switching or rollback; they may retain or rotate credentials.",
+    "Codex appears to be running. Close CLI and IDE Codex processes, or use 'use <selector> --force' and restart them immediately afterward. Rollback still requires them to stop.",
   UNSUPPORTED:
     "Safe process detection and locking currently require Linux with /proc and util-linux flock.",
   CONFLICT:
