@@ -8,10 +8,11 @@ import { Client, type Vault } from "./omniroute/client.js";
 import { Engine } from "./sync/engine.js";
 import { current, doctor, list } from "./commands.js";
 import { safeOutput } from "./output.js";
-const help = `codex-account — official Codex OAuth account manager\n\nCommands:\n  list             List OmniRoute Codex OAuth accounts\n  current          Show active local identity and sync status\n  sync             Push authoritative active auth to OmniRoute\n  sync-all         Push active auth; pull inactive account caches\n  use <selector>   Switch by unique ID, ID prefix, name, or email\n  rollback         Restore latest valid distinct backup (offline)\n  doctor           Check configuration, auth, permissions, connectivity, locks\n\nOnly ~/.codex/auth.json switches. Close Codex before use/rollback.\nConfigure ~/.codex-accounts/config.json with baseUrl and credentialCommand,\nor supply OMNIROUTE_URL and OMNIROUTE_MANAGEMENT_TOKEN via a secret manager.\nNo token command-line arguments are accepted. See README for setup.\n`;
+import { isConfigured, setupInteractive } from "./setup.js";
+const help = `codex-account — official Codex OAuth account manager\n\nCommands:\n  setup            Save URL and admin token in an encrypted local vault\n  list             List OmniRoute Codex OAuth accounts\n  current          Show active local identity and sync status\n  sync             Push authoritative active auth to OmniRoute\n  sync-all         Push active auth; pull inactive account caches\n  use <selector>   Switch by unique ID, ID prefix, name, or email\n  rollback         Restore latest valid distinct backup (offline)\n  doctor           Check configuration, auth, permissions, connectivity, locks\n\nOnly ~/.codex/auth.json switches. Close Codex before use/rollback.\nRun codex-account setup once; later commands reuse a session key, or ask for the vault passphrase.\nExplicit credential helpers and secret-manager environment injection also work.\nNo token command-line arguments are accepted. See README for setup.\n`;
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (!command || command === "--help" || command === "help") {
+  if (command === "--help" || command === "help") {
     process.stdout.write(help);
     return;
   }
@@ -20,6 +21,16 @@ async function main(): Promise<void> {
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     ) as { version: string };
     process.stdout.write(`${metadata.version}\n`);
+    return;
+  }
+  const home = os.homedir();
+  if (!command) {
+    if (await isConfigured(home)) process.stdout.write(help);
+    else process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
+    return;
+  }
+  if (command === "setup" && args.length === 0) {
+    process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
     return;
   }
   if (
@@ -37,8 +48,7 @@ async function main(): Promise<void> {
       : args.length !== 0)
   )
     throw new AppError("CONFIG");
-  const home = os.homedir(),
-    store = new Store(home),
+  const store = new Store(home),
     getVault = async () => new Client(await loadConfig(home));
   if (command === "doctor") {
     const r = await doctor(store, getVault, home);

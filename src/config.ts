@@ -7,6 +7,7 @@ import { parse as parseToml } from "smol-toml";
 import { record, str } from "./domain/auth.js";
 import { AppError, isErrno } from "./domain/errors.js";
 import { directory, readPrivate } from "./local/files.js";
+import { openVault, type VaultOptions } from "./local/vault.js";
 export interface Config {
   baseUrl: string;
   token: string;
@@ -93,6 +94,7 @@ export async function checkCodexConfig(
 export async function loadConfig(
   home = os.homedir(),
   env: NodeJS.ProcessEnv = process.env,
+  vaultOptions: VaultOptions = {},
 ): Promise<Config> {
   let baseUrl = env.OMNIROUTE_URL,
     token = env.OMNIROUTE_MANAGEMENT_TOKEN;
@@ -112,6 +114,11 @@ export async function loadConfig(
       throw new AppError("CONFIG");
     baseUrl = baseUrl ?? str(c.baseUrl);
   }
+  if (!token && typeof c.managedVaultId === "string") {
+    const stored = await openVault(home, c.managedVaultId, vaultOptions);
+    baseUrl = stored.baseUrl;
+    token = stored.token;
+  }
   if (!baseUrl) throw new AppError("CONFIG");
   const normalized = validateUrl(baseUrl);
   if (!token) {
@@ -129,7 +136,14 @@ export async function loadConfig(
         cmd.slice(1) as string[],
         { timeout: 10000, maxBuffer: 16384, encoding: "utf8", env: { ...env } },
         (error, stdout) => {
-          if (error) reject(new AppError("CONFIG"));
+          if (error)
+            reject(
+              new AppError(
+                typeof c.managedSecretId === "string"
+                  ? "KEYRING_UNAVAILABLE"
+                  : "CONFIG",
+              ),
+            );
           else resolve(stdout.trim());
         },
       );

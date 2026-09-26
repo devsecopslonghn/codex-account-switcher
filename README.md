@@ -30,7 +30,7 @@ Requires Node.js 22.13+ (Node 24 LTS recommended), npm, Linux `/proc`, and util-
 ```sh
 npm install --global @devsecopslonghn/codex-account-switcher
 codex-account --version
-codex-account --help
+codex-account
 ```
 
 To upgrade or remove it:
@@ -40,7 +40,7 @@ npm update --global @devsecopslonghn/codex-account-switcher
 npm uninstall --global @devsecopslonghn/codex-account-switcher
 ```
 
-If npm reports that the global executable directory is not on `PATH`, follow npm's instructions or use a Node version manager. The published package includes compiled JavaScript and its runtime dependency, so consumers do not need build tools. Continue with the OmniRoute credential setup below; installation never changes your Codex auth or enables automation.
+If npm reports that the global executable directory is not on `PATH`, follow npm's instructions or use a Node version manager. The published package includes compiled JavaScript and its runtime dependency, so consumers do not need build tools. The first bare `codex-account` run starts setup when no configuration exists. Installation and setup never change your Codex auth or enable automation.
 
 ## Install from source
 
@@ -66,40 +66,19 @@ Do not actively use the same OAuth token family on multiple machines. A local lo
 
 ## Management credential bootstrap
 
-Normal operations call the HTTP management API directly; no `omniroute` subprocess is involved. You can use `omniroute connect https://vault.example --scope admin` for upstream bootstrap, but this program does not automatically extract its private context/keychain data.
+Create a dedicated **admin** Access Token (`oma_live_…`) in OmniRoute **Settings → Access Tokens**. Then run `codex-account setup`, or just `codex-account` on first use. The terminal wizard asks for the server URL and token, hides token input, validates the URL, calls OmniRoute's `/api/cli/whoami` to prove admin scope, and lists providers to verify connectivity. Invalid input can be retried. Setup does not import, export, or switch any OAuth account.
 
-OmniRoute stores context credentials using optional native `keytar`, with a private file fallback. Depending on that internal hydration API would couple this utility to native modules and mutable CLI internals. Instead, configure a **nonsecret URL plus a credential helper**. The helper may use your existing secret manager/keychain integration. It must output just the management bearer token to stdout. It runs without a shell, with a ten-second timeout; helper stderr and exceptions are never printed. No management token is persisted by this utility.
+The wizard also asks you to create a vault passphrase (at least 12 characters). It encrypts the URL and token with scrypt and AES-256-GCM in a private `~/.codex-accounts/vault-<id>.json` file (0600); `config.json` holds only a random vault ID. Neither the token nor the passphrase goes into `.bashrc`, command arguments, or an environment file. A hash alone cannot work because the CLI must recover the original bearer token to call OmniRoute. The passphrase is required to recover the encryption key after the kernel cache is lost.
 
-For example, store a dedicated admin-scoped OmniRoute management token in Linux Secret Service using `secret-tool store --label='Codex account vault' application codex-account server vault`. Enter the token at the interactive prompt, not as a command argument. Then create the following file using your editor:
+On Linux with `keyctl` (from the `keyutils` package), setup keeps the derived key in the current user's kernel keyring. Later CLI processes reuse it without another prompt, including after opening a new terminal. The key is kept in kernel memory, readable by processes running as your user, and disappears when the kernel keyring is cleared or the system reboots. The next interactive command asks for the vault passphrase once; **you do not re-enter the admin token**. If `keyctl` is unavailable, the vault still works but each command asks for the passphrase. Noninteractive commands fail with `VAULT_LOCKED` until an interactive command unlocks it. Do not enable the optional timer unless the session key is available whenever it runs. A fully unattended reboot needs an external hardware/OS secret manager; the CLI cannot safely auto-unlock an encrypted file using only data stored beside it.
 
-```sh
-install -d -m 700 ~/.codex-accounts
-install -m 600 /dev/null ~/.codex-accounts/config.json
-```
+Run `codex-account setup` again to replace an expired admin token. It validates the new admin scope before changing the active config; failed validation preserves the old vault. Check `codex-account doctor` after setup. Stop Codex before `use` or `rollback`. The old Secret Service credential-helper configuration remains readable, but the new wizard saves to the encrypted local vault.
 
-`~/.codex-accounts/config.json`:
-
-```json
-{
-  "baseUrl": "https://vault.example",
-  "credentialCommand": [
-    "/usr/bin/secret-tool",
-    "lookup",
-    "application",
-    "codex-account",
-    "server",
-    "vault"
-  ]
-}
-```
-
-Use your actual absolute helper path. Do not put secrets in helper arguments or this JSON file. The OS keychain must be unlocked and accessible to user services if you enable the timer. A root-owned/system-managed helper or your existing secret manager can also supply the token. Credentials in the OmniRoute keychain may be JSON envelopes; an operator-supplied adapter must extract the token in memory rather than returning that envelope.
-
-For CI/headless environments, inject `OMNIROUTE_URL` and `OMNIROUTE_MANAGEMENT_TOKEN` from the scheduler's secret manager. These environment variables take precedence. Do not type token assignments into shell history or commit environment files. Environment secrets are visible to sufficiently privileged local processes; prefer an OS keychain helper on interactive machines. There are no token CLI flags and no plaintext management-token store.
+Existing explicit credential helpers remain supported: put a nonsecret `baseUrl` and an absolute `credentialCommand` array in mode-0600 `~/.codex-accounts/config.json`. The command must print only the bearer token to stdout, runs without a shell, and has a ten-second timeout. CI/headless services may instead inject `OMNIROUTE_URL` and `OMNIROUTE_MANAGEMENT_TOKEN` from their secret manager; those variables take precedence. Do not put tokens in command arguments, shell history, or committed environment files. The utility does not read OmniRoute CLI's private context/keychain format.
 
 HTTPS is mandatory except for exact loopback `localhost`, `127.0.0.1`, or `::1`, which supports local testing or a trusted SSH tunnel. Plain HTTP to LAN/Tailscale addresses is refused; use TLS or a local tunnel. Redirects are refused. A reverse-proxy path prefix is supported. Never embed credentials in the URL.
 
-The credential needs read access to list providers and admin access for POST import/export. An inference API key must have OmniRoute's management scope. `doctor` proves authenticated listing; it deliberately does not mutate a credential to probe admin permission.
+The credential needs read access to list providers and admin access for POST import/export. Setup requires an admin Access Token and proves its scope using `/api/cli/whoami`. `doctor` proves authenticated listing; it deliberately does not mutate a credential to probe admin permission for manually configured helpers.
 
 ## Commands
 
@@ -193,7 +172,7 @@ Disabling automation does not remove cached credentials. Review retention before
 
 ## Security and threat model
 
-Trusted components are the current OS user, local filesystem/kernel, credential helper, TLS trust store, and authenticated OmniRoute server. An attacker controlling that user, root, the server, or the helper can obtain/replace credentials; this tool cannot protect against them. Management tokens with export permission can retrieve all accessible OAuth sessions. Scope and isolate the vault accordingly.
+Trusted components are the current OS user, local filesystem/kernel, optional credential helper, TLS trust store, and authenticated OmniRoute server. An attacker controlling that user, root, the server, or the helper can obtain/replace credentials; this tool cannot protect against them. Management tokens with export permission can retrieve all accessible OAuth sessions. Scope and isolate the vault accordingly.
 
 The client validates structure, required tokens, JWT payloads, account consistency, and user identity before replacing auth. It decodes JWTs for metadata **without signature verification**. Expired target access credentials are refused for activation after export. ID-token expiry alone does not override a current access-token expiry.
 
@@ -214,12 +193,13 @@ node dist/cli.js --help
 
 Tests start an ephemeral localhost OmniRoute-compatible HTTP server and use temporary home directories. They exercise both switch directions, A2 rotation preservation, malformed and mismatched auth, API errors, locks/concurrent processes, SIGKILL before rename, process refusal, atomic-write failure, backups/rollback, background authority rules, same-workspace users, conflict handling, and secret suppression. They never need OpenAI credentials. See [test coverage](docs/testing.md).
 
-For real verification, stop Codex and other token consumers first. Bootstrap the vault and helper, run `doctor`, then `list` and `current`. Run `sync`, switch to a second known connection with `use`, and check `current`. Start official Codex in the usual environment and verify login/use/resume; exit it before switching back. Compare your configuration/session files before and after if desired. Never print or paste `auth.json`, cache files, exports, or helper stdout. Run `sync-all` manually before enabling automation. Real OpenAI login/inference is intentionally not part of automated verification.
+For real verification, stop Codex and other token consumers first. Run interactive `setup`, then `doctor`, then `list` and `current`. Run `sync`, switch to a second known connection with `use`, and check `current`. Start official Codex in the usual environment and verify login/use/resume; exit it before switching back. Compare your configuration/session files before and after if desired. Never print or paste `auth.json`, cache files, exports, or helper stdout. Run `sync-all` manually before enabling automation. Real OpenAI login/inference is intentionally not part of automated verification.
 
 ## Troubleshooting and upgrades
 
 - `CONFIG`: validate the private JSON config, URL, absolute helper, environment, and effective file auth mode. This program never rewrites Codex settings to fix incompatibility. Existing forced workspace policies can restrict which accounts Codex accepts; managed overrides require operator review.
 - `FILESYSTEM`: check modes/ownership and regular files; use a local filesystem. Resolve symlink/hardlink setups deliberately. Do not loosen permissions to work around it.
+- `VAULT_LOCKED`: run `codex-account list` in an interactive terminal to unlock the encrypted vault. `VAULT_UNLOCK_FAILED` means the passphrase was rejected three times; retry carefully. `VAULT_CORRUPT` means the vault file is missing or damaged; restore your backup or rerun `setup` with a valid admin token.
 - `NOT_FOUND` / `AMBIGUOUS`: repair missing user metadata or duplicate server connections using trusted OmniRoute tools. Email matching alone cannot fix it.
 - `PROCESS_RUNNING`: fully close Codex and its IDE/app-server processes; run from an ordinary terminal. There is no force override.
 - `AUTHENTICATION` / `AUTHORIZATION`: renew the management credential or grant the required scope. Ordinary inference-only keys do not authorize management.

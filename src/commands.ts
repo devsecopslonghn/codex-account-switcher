@@ -114,8 +114,7 @@ export async function doctor(
     return "Valid workspace and user identity; JWT signatures are not verified.";
   });
   await check("cache-permissions", async () => {
-    await directory(store.root);
-    await directory(store.backupDir);
+    await store.init();
     for (const f of await fs.readdir(store.root)) {
       if (f.endsWith(".json")) await readPrivate(path.join(store.root, f));
     }

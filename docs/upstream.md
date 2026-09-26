@@ -17,7 +17,7 @@ Relevant source: [export route](https://github.com/diegosouzapw/OmniRoute/blob/a
 
 [OmniRoute contexts](https://github.com/diegosouzapw/OmniRoute/blob/ae2ba35852d4e5a55486a1c0e6a779105564fd6d/bin/cli/contexts.mjs) use optional native `keytar`, service `omniroute-cli`, and context credential references. Without a keychain, upstream explicitly falls back to a private mode-0600 `config.json`. Its data directory follows `DATA_DIR`, legacy `~/.omniroute`, then platform/XDG rules. Native keychain availability, context hydration, and file format are CLI internals rather than a stable public client SDK.
 
-This utility therefore uses an explicit base URL and a credential helper (or an environment token). It does not import arbitrary OmniRoute code, silently downgrade an existing keychain to plaintext, export contexts with secrets, or persist management tokens. An operator can configure a helper backed by the same OS keychain or another secret manager. See the README for setup.
+This utility therefore uses an explicit base URL and an encrypted local management-token vault after interactive setup. A custom credential helper or secret-manager environment injection remains available. It does not import arbitrary OmniRoute code, silently downgrade an existing keychain to plaintext, or export contexts with secrets. An operator can configure a helper backed by the same OS keychain or another secret manager. See the README for setup.
 
 ## Rotation and conflict limits
 

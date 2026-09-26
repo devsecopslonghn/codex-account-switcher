@@ -121,4 +121,12 @@ export class Client implements Vault {
   async health(): Promise<void> {
     await this.list();
   }
+  async verifySetupAccess(): Promise<void> {
+    const identity = record(await this.request("/api/cli/whoami"));
+    if (identity.authenticated !== true) throw new AppError("AUTHENTICATION");
+    // Provider import/export needs admin. A provider listing alone only proves read access.
+    if (identity.viaAccessToken !== true || identity.scope !== "admin")
+      throw new AppError("AUTHORIZATION");
+    await this.list();
+  }
 }

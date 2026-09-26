@@ -18,7 +18,13 @@ export type ErrorCode =
   | "CHANGED"
   | "DURABILITY"
   | "COMMITTED"
-  | "NO_BACKUP";
+  | "NO_BACKUP"
+  | "SETUP_REQUIRED"
+  | "KEYRING_UNAVAILABLE"
+  | "WEAK_PASSPHRASE"
+  | "VAULT_CORRUPT"
+  | "VAULT_UNLOCK_FAILED"
+  | "VAULT_LOCKED";
 const messages: Record<ErrorCode, string> = {
   INVALID_AUTH:
     "Auth is malformed or incomplete; active credentials were not replaced.",
@@ -59,6 +65,17 @@ const messages: Record<ErrorCode, string> = {
   COMMITTED:
     "Auth replacement committed, but final state bookkeeping failed. Inspect current before retrying; rollback is available.",
   NO_BACKUP: "No valid distinct backup is available for rollback.",
+  SETUP_REQUIRED:
+    "Interactive setup requires a terminal. Run codex-account setup in a terminal.",
+  KEYRING_UNAVAILABLE:
+    "Linux Secret Service is unavailable. Unlock its collection or run codex-account setup to use the encrypted local vault.",
+  WEAK_PASSPHRASE: "Use a vault passphrase of at least 12 characters.",
+  VAULT_CORRUPT:
+    "Encrypted vault is missing or damaged. Restore a backup or run codex-account setup again.",
+  VAULT_UNLOCK_FAILED:
+    "Vault passphrase was rejected three times. Run the command again to retry.",
+  VAULT_LOCKED:
+    "Vault is locked and no terminal is available. Run a command interactively once to unlock it, then retry.",
 };
 export class AppError extends Error {
   constructor(public readonly code: ErrorCode) {

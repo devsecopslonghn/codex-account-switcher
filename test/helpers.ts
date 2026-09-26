@@ -61,6 +61,8 @@ export class FakeServer {
   exportCode = "reauth_required";
   exportOverride: unknown = undefined;
   listStatus = 200;
+  whoamiScope = "admin";
+  whoamiViaAccessToken = true;
   beforeExport?: () => Promise<void>;
   afterImport?: () => Promise<void>;
   server?: Server;
@@ -76,6 +78,16 @@ export class FakeServer {
           res
             .writeHead(401)
             .end(JSON.stringify({ error: "FAKE_MANAGEMENT_SECRET" }));
+          return;
+        }
+        if (req.method === "GET" && url === "/api/cli/whoami") {
+          res.writeHead(200).end(
+            JSON.stringify({
+              authenticated: true,
+              viaAccessToken: this.whoamiViaAccessToken,
+              scope: this.whoamiScope,
+            }),
+          );
           return;
         }
         if (req.method === "GET" && url.startsWith("/api/providers?")) {
