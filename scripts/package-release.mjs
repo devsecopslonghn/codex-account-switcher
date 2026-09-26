@@ -18,7 +18,7 @@ const manifest = JSON.parse(
   await readFile(path.join(root, "package.json"), "utf8"),
 );
 assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
-assert.equal(manifest.name, "codex-account-switcher");
+assert.equal(manifest.name, "@devsecopslonghn/codex-account-switcher");
 if (process.env.RELEASE_TAG) {
   assert.equal(
     process.env.RELEASE_TAG,
@@ -42,7 +42,7 @@ const [packed] = JSON.parse(
     encoding: "utf8",
   }),
 );
-const filename = `${manifest.name}-${manifest.version}.tgz`;
+const filename = `${manifest.name.replace(/^@/, "").replace("/", "-")}-${manifest.version}.tgz`;
 assert.equal(packed.filename, filename);
 assert.deepEqual(
   packed.bundled.sort(),

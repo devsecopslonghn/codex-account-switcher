@@ -23,29 +23,29 @@ File-based OAuth authentication is required. Keyring, auto, ephemeral, API-key, 
 
 We do not use an auth symlink: Codex may atomically replace its auth file during refresh, breaking a symlink-based switch scheme. The utility rejects symlinked/hardlinked credential files and symlinked state/Codex directories.
 
-## Install from a release (no source build)
+## Install with npm
 
-Download the prebuilt `.tgz` and `SHA256SUMS` from [GitHub Releases](https://github.com/longhn0710/codex-account-switcher/releases). The repository is private: sign in with an account that has repository access. Node.js 22.13+ or 24+, npm, Linux `/proc`, and util-linux `flock` are still required; Node itself is not bundled.
-
-For example, using an authenticated GitHub CLI:
+Requires Node.js 22.13+ (Node 24 LTS recommended), npm, Linux `/proc`, and util-linux `flock`. Node itself is not bundled.
 
 ```sh
-mkdir -p "$HOME/Downloads/codex-account-v1.0.0"
-cd "$HOME/Downloads/codex-account-v1.0.0"
-gh release download v1.0.0 --repo longhn0710/codex-account-switcher \
-  --pattern 'codex-account-switcher-*.tgz' --pattern SHA256SUMS
-sha256sum --check SHA256SUMS
-npm install --offline --ignore-scripts --global --prefix "$HOME/.local" ./codex-account-switcher-1.0.0.tgz
-export PATH="$HOME/.local/bin:$PATH"
+npm install --global @devsecopslonghn/codex-account-switcher
 codex-account --version
+codex-account --help
 ```
 
-The package includes compiled JavaScript and its runtime dependency. Installation needs no npm registry connection or build tools. You can also download the same two assets in the browser and run the checksum/install commands in that directory. Use the release asset, not GitHub's automatically generated source archives. Continue with the OmniRoute credential setup below; installation never changes your Codex auth or enables automation.
+To upgrade or remove it:
+
+```sh
+npm update --global @devsecopslonghn/codex-account-switcher
+npm uninstall --global @devsecopslonghn/codex-account-switcher
+```
+
+If npm reports that the global executable directory is not on `PATH`, follow npm's instructions or use a Node version manager. The published package includes compiled JavaScript and its runtime dependency, so consumers do not need build tools. Continue with the OmniRoute credential setup below; installation never changes your Codex auth or enables automation.
 
 ## Install from source
 
 ```sh
-git clone https://github.com/longhn0710/codex-account-switcher.git
+git clone https://github.com/devsecopslonghn/codex-account-switcher.git
 cd codex-account-switcher
 npm ci
 npm run check
@@ -189,7 +189,7 @@ rm ~/.config/systemd/user/codex-account-sync.service ~/.config/systemd/user/code
 systemctl --user daemon-reload
 ```
 
-Disabling automation does not remove cached credentials. Review retention before deliberately deleting the private account directory. Uninstall the executable with `npm uninstall --global --prefix "$HOME/.local" codex-account-switcher`.
+Disabling automation does not remove cached credentials. Review retention before deliberately deleting the private account directory. Uninstall the executable with `npm uninstall --global @devsecopslonghn/codex-account-switcher`.
 
 ## Security and threat model
 
@@ -232,4 +232,4 @@ When upgrading, disable the timer and finish any active operation. Download and 
 
 ## Publishing releases
 
-Pushing an annotated `vMAJOR.MINOR.PATCH` tag triggers the Release workflow. It checks the version, runs quality checks, builds a clean package, verifies offline installation with an empty npm cache, and publishes the `.tgz` plus `SHA256SUMS`. See [release maintenance](docs/releases.md) for versioning, manual runs, and recovery.
+Pushing an annotated `vMAJOR.MINOR.PATCH` tag triggers the Release workflow. It checks the version, runs quality checks, builds a clean package, verifies offline installation with an empty npm cache, publishes the scoped package to npm with provenance, and attaches the `.tgz` plus `SHA256SUMS` to a GitHub Release. See [release maintenance](docs/releases.md) for npm trusted publishing setup, versioning, manual runs, and recovery.
