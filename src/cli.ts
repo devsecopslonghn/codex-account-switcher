@@ -4,7 +4,10 @@ import { readFile } from "node:fs/promises";
 import { checkCodexConfig, loadConfig } from "./config.js";
 import { safeError, AppError } from "./domain/errors.js";
 import { Store } from "./local/store.js";
-import { refreshCodexDaemon } from "./local/daemon.js";
+import { hasCodexAncestor } from "./local/process.js";
+import { quiesceCodexSessions } from "./local/sessions.js";
+import { readSwitchJob } from "./local/switch-job.js";
+import { runSwitchWorker, startSwitchWorker } from "./local/switch-worker.js";
 import { Client, type Vault } from "./omniroute/client.js";
 import { Engine } from "./sync/engine.js";
 import { current, doctor, list } from "./commands.js";
@@ -28,6 +31,10 @@ function usageError(command?: CommandName): void {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
+  if (command === "--switch-worker") {
+    await runSwitchWorker();
+    return;
+  }
   if (command === "help" || isHelpFlag(command ?? "")) {
     if (args.length === 0) process.stdout.write(globalHelp());
     else if (args.length === 1 && isCommandName(args[0]!))
@@ -73,13 +80,19 @@ async function main(): Promise<void> {
     process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
     return;
   }
-  const force = forceFlags.length === 1;
   const store = new Store(home),
     getVault = async () => new Client(await loadConfig(home));
   if (command === "doctor") {
     const r = await doctor(store, getVault, home);
     process.stdout.write(safeOutput(r) + "\n");
     if (!r.ok) process.exitCode = 1;
+    return;
+  }
+  if (command === "switch-status") {
+    const job = await readSwitchJob(store);
+    if (!job) throw new AppError("NOT_FOUND");
+    process.stdout.write(safeOutput(job) + "\n");
+    if (job.status === "failed") process.exitCode = 1;
     return;
   }
   await checkCodexConfig(home);
@@ -114,25 +127,34 @@ async function main(): Promise<void> {
     process.stdout.write(safeOutput(await current(store, vault, error)) + "\n");
     return;
   }
+  if (command === "use") {
+    const config = await loadConfig(home);
+    if (await hasCodexAncestor(store.codex)) {
+      const job = await startSwitchWorker(home, selectors[0]!, config);
+      process.stdout.write(
+        safeOutput({
+          action: "queued",
+          jobId: job.id,
+          detail:
+            "This Codex session will disconnect. Reopen Codex and run codex-account switch-status to inspect the result.",
+        }) + "\n",
+      );
+      return;
+    }
+    const r = await new Engine(store, new Client(config)).use(
+      selectors[0]!,
+      true,
+      () => quiesceCodexSessions(store.codex),
+    );
+    process.stdout.write(safeOutput(r) + "\n");
+    return;
+  }
   const vault = await getVault();
   if (command === "list") {
     process.stdout.write(safeOutput(await list(store, vault)) + "\n");
     return;
   }
-  const engine = new Engine(store, vault),
-    r =
-      command === "use"
-        ? await engine.use(selectors[0]!, force)
-        : await engine.sync(command === "sync-all");
-  if (command === "use") {
-    r.daemon = await refreshCodexDaemon();
-    if (r.daemon === "failed") {
-      r.warnings.push(
-        "CODEX_DAEMON: Local auth was updated, but the Codex background server could not be restarted. Its running sessions may still use the previous account.",
-      );
-      process.exitCode = 1;
-    }
-  }
+  const r = await new Engine(store, vault).sync(command === "sync-all");
   process.stdout.write(safeOutput(r) + "\n");
   if (r.failures?.length) process.exitCode = 1;
 }

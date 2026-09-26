@@ -12,15 +12,16 @@ import { type Vault } from "../omniroute/client.js";
 import { Store, type State } from "../local/store.js";
 import { readPrivate } from "../local/files.js";
 import { codexRunning } from "../local/process.js";
+import type { SessionResult } from "../local/sessions.js";
 export interface Report {
   action: string;
   connectionId?: string;
   warnings: string[];
-  daemon?: "not-running" | "restarted" | "failed";
+  sessions?: SessionResult;
   failures?: { connectionId: string; error: string }[];
 }
 const runningWarning =
-  "FORCED_SWITCH: Running Codex processes may keep the previous account in memory or later refresh and overwrite auth.json. The managed background server will be restarted if available; restart independent IDE sessions before using the selected account.";
+  "FORCED_SWITCH: Codex sessions using this home were terminated before the credential switch. Active tasks in those sessions were interrupted.";
 export class Engine {
   constructor(
     readonly store: Store,
@@ -167,8 +168,13 @@ export class Engine {
     await this.store.saveState(state);
     return a;
   }
-  async use(selector: string, force = false): Promise<Report> {
+  async use(
+    selector: string,
+    force = false,
+    quiesce?: () => Promise<SessionResult>,
+  ): Promise<Report> {
     return this.locked(async () => {
+      if (force && !quiesce) throw new AppError("CONFIG");
       const warnings: string[] = [];
       await this.stopped(force, warnings);
       const raw = await this.store.activeRaw();
@@ -183,8 +189,17 @@ export class Engine {
         raw !== undefined
           ? await this.push(raw, connections, state, warnings)
           : undefined;
-      if (active?.id === target.id)
-        return { action: "already-active", connectionId: target.id, warnings };
+      if (active?.id === target.id) {
+        const sessions = force ? await quiesce!() : undefined;
+        await this.stopped();
+        await this.unchanged(raw);
+        return {
+          action: "already-active",
+          connectionId: target.id,
+          warnings,
+          sessions,
+        };
+      }
       let auth: ParsedAuth;
       try {
         auth = await this.pull(target, state, connections);
@@ -205,19 +220,25 @@ export class Engine {
         throw new AppError("REFRESH_FAILED");
       await this.unchanged(raw);
       if (raw !== undefined) await this.store.backup(raw);
-      await this.store.replace(serialize(auth), raw, () =>
-        this.stopped(force, warnings),
-      );
+      const sessions = force ? await quiesce!() : undefined;
+      await this.stopped();
+      await this.unchanged(raw);
+      await this.store.replace(serialize(auth), raw, () => this.stopped());
       try {
         if (active && state.accounts[active.id])
           state.accounts[active.id]!.status = "AVAILABLE";
         state.activeConnectionId = target.id;
         state.accounts[target.id]!.status = "ACTIVE_LOCAL";
         await this.store.saveState(state);
+        if (force) {
+          const post = await quiesce!();
+          sessions!.terminated += post.terminated;
+        }
+        await this.unchanged(serialize(auth));
       } catch {
         throw new AppError("COMMITTED");
       }
-      return { action: "use", connectionId: target.id, warnings };
+      return { action: "use", connectionId: target.id, warnings, sessions };
     });
   }
   async rollback(): Promise<Report> {

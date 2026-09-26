@@ -5,6 +5,7 @@ export const commandNames = [
   "sync",
   "sync-all",
   "use",
+  "switch-status",
   "rollback",
   "doctor",
 ] as const;
@@ -89,7 +90,9 @@ const commands: Record<CommandName, CommandHelp> = {
     summary: "Switch the active local Codex login",
     description:
       "Select a connection by full ID, unique ID prefix, exact name, or exact email (case-insensitive). A non-unique selector is rejected.",
-    options: ["-f, --force  Bypass only the running-Codex process check."],
+    options: [
+      "-f, --force  Accepted for compatibility; stopping sessions is already the default.",
+    ],
     examples: [
       "codex-account list",
       "codex-account use 'person@example.com'",
@@ -97,10 +100,20 @@ const commands: Record<CommandName, CommandHelp> = {
     ],
     notes: [
       "Email is a selector, not the internal userId used to verify account identity.",
-      "Normally close Codex CLI and IDE sessions before switching.",
-      "With -f/--force, the managed Codex background server restarts automatically after a successful switch. Active tasks may be interrupted; independent IDE sessions may still need a restart.",
-      "If the background server cannot be restarted, the command reports a committed local switch and exits with status 1.",
-      "File, identity, lock, and backup checks remain enabled with force.",
+      "The command validates credentials and prepares a backup, stops matching local CLI, IDE app-server, and daemon processes, then replaces auth.json. Active tasks in those sessions are interrupted.",
+      "If a session cannot be stopped before replacement, auth.json is not replaced. A post-replacement failure is reported as COMMITTED. No daemon is restarted automatically; reopen Codex after switching.",
+      "When invoked by a running Codex agent, an independent worker finishes the operation. Reopen Codex and run switch-status for its result.",
+      "File, identity, lock, and backup checks remain enabled.",
+    ],
+  },
+  "switch-status": {
+    usage: "codex-account switch-status",
+    summary: "Inspect the latest detached account switch",
+    description:
+      "Show whether a switch started inside a Codex session completed or failed after that session disconnected.",
+    examples: ["codex-account switch-status"],
+    notes: [
+      "The result is stored in a private local status file; no token is stored there.",
     ],
   },
   rollback: {

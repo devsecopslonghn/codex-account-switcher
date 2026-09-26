@@ -2,39 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import * as fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { setup } from "./helpers.js";
+import { startSwitchWorker } from "../src/local/switch-worker.js";
+import { readSwitchJob } from "../src/local/switch-job.js";
+import { parseAuth } from "../src/domain/auth.js";
 const run = promisify(execFile);
-
-async function fakeCodexDaemon(home: string): Promise<{
-  bin: string;
-  log: string;
-}> {
-  const bin = path.join(home, "bin");
-  const log = path.join(home, "daemon.log");
-  await fs.mkdir(bin);
-  await fs.writeFile(
-    path.join(bin, "codex"),
-    `#!/bin/sh
-if [ -n "$OMNIROUTE_MANAGEMENT_TOKEN" ]; then exit 41; fi
-if [ "$1" != app-server ] || [ "$2" != daemon ]; then exit 42; fi
-case "$3" in
-  version)
-    if [ "${"$"}FAKE_DAEMON_STATUS" = absent ]; then
-      printf 'failed to connect to app-server-control.sock: No such file or directory (os error 2)\\n' >&2
-      exit 1
-    fi
-    printf '{"status":"%s"}\\n' "${"$"}FAKE_DAEMON_STATUS" ;;
-  restart) printf 'restart\\n' >> "${"$"}FAKE_DAEMON_LOG"; [ "${"$"}FAKE_DAEMON_FAIL" != 1 ] ;;
-  *) exit 43 ;;
-esac
-`,
-    { mode: 0o700 },
-  );
-  return { bin, log };
-}
 
 test("global and command help are contextual and work without config or network", async () => {
   const env = {
@@ -57,6 +31,7 @@ test("global and command help are contextual and work without config or network"
     "sync",
     "sync-all",
     "use",
+    "switch-status",
     "rollback",
     "doctor",
   ]) {
@@ -143,17 +118,14 @@ test("actual CLI list/current/sync/sync-all use fake HTTP and a temporary home",
   assert.match(offline.stdout, /UNAVAILABLE/);
   assert.match(offline.stdout, /ACTIVE_LOCAL/);
 });
-test("CLI exposes use help and accepts force before or after the selector", async (t) => {
+test("CLI defaults to stopping sessions and keeps -f as an alias", async (t) => {
   const f = await setup();
   t.after(f.cleanup);
-  const daemon = await fakeCodexDaemon(f.home);
   const env = {
-    PATH: `${daemon.bin}:${process.env.PATH}`,
+    PATH: process.env.PATH,
     HOME: f.home,
     OMNIROUTE_URL: f.server.url,
     OMNIROUTE_MANAGEMENT_TOKEN: "FAKE_MANAGEMENT_SECRET",
-    FAKE_DAEMON_STATUS: "running",
-    FAKE_DAEMON_LOG: daemon.log,
   };
   const cli = (...args: string[]) =>
     run(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
@@ -161,10 +133,9 @@ test("CLI exposes use help and accepts force before or after the selector", asyn
       timeout: 10000,
     });
   assert.match((await cli("use", "--help")).stdout, /--force/);
-  assert.equal(
-    JSON.parse((await cli("use", "B", "--force")).stdout).connectionId,
-    "B",
-  );
+  const first = JSON.parse((await cli("use", "B")).stdout);
+  assert.equal(first.connectionId, "B");
+  assert.deepEqual(first.sessions, { terminated: 0 });
   assert.equal(
     JSON.parse((await cli("use", "-f", "A")).stdout).connectionId,
     "A",
@@ -175,55 +146,71 @@ test("CLI exposes use help and accepts force before or after the selector", asyn
   );
   const same = JSON.parse((await cli("use", "B", "-f")).stdout);
   assert.equal(same.action, "already-active");
-  assert.equal(same.daemon, "restarted");
-  assert.equal(
-    (await fs.readFile(daemon.log, "utf8")).trim().split("\n").length,
-    4,
-  );
+  assert.deepEqual(same.sessions, { terminated: 0 });
   await assert.rejects(cli("use", "B", "--force", "--force"));
   await assert.rejects(cli("use", "missing", "-f"));
-  env.FAKE_DAEMON_STATUS = "absent";
   const withoutDaemon = JSON.parse((await cli("use", "A", "-f")).stdout);
-  assert.equal(withoutDaemon.daemon, "not-running");
-  assert.equal(
-    (await fs.readFile(daemon.log, "utf8")).trim().split("\n").length,
-    4,
+  assert.deepEqual(withoutDaemon.sessions, { terminated: 0 });
+  assert.doesNotMatch(
+    (await cli("use", "--help")).stdout,
+    /restarts automatically/,
   );
 });
 
-test("failed daemon restart reports a committed local switch", async (t) => {
+test("detached worker finishes a switch and records a private result", async (t) => {
   const f = await setup();
   t.after(f.cleanup);
-  const daemon = await fakeCodexDaemon(f.home);
-  const env = {
-    PATH: `${daemon.bin}:${process.env.PATH}`,
-    HOME: f.home,
-    OMNIROUTE_URL: f.server.url,
-    OMNIROUTE_MANAGEMENT_TOKEN: "FAKE_MANAGEMENT_SECRET",
-    FAKE_DAEMON_STATUS: "running",
-    FAKE_DAEMON_LOG: daemon.log,
-    FAKE_DAEMON_FAIL: "1",
-  };
-  await assert.rejects(
-    run(process.execPath, ["--import", "tsx", "src/cli.ts", "use", "B", "-f"], {
-      env,
-      timeout: 10000,
-    }),
-    (error: unknown) => {
-      if (!error || typeof error !== "object" || !("stdout" in error))
-        return false;
-      const report = JSON.parse(String(error.stdout));
-      return (
-        "code" in error &&
-        error.code === 1 &&
-        report.action === "use" &&
-        report.connectionId === "B" &&
-        report.daemon === "failed" &&
-        report.warnings.some((warning: string) =>
-          warning.includes("Local auth was updated"),
-        )
-      );
-    },
+  const entry = path.resolve("src/cli.ts");
+  const job = await startSwitchWorker(
+    f.home,
+    "B",
+    { baseUrl: f.server.url, token: "FAKE_MANAGEMENT_SECRET" },
+    entry,
+    ["--import", "tsx"],
   );
-  assert.equal((await f.store.activeRaw())?.includes("FAKE_REFRESH_b_1"), true);
+  let latest = await readSwitchJob(f.store);
+  for (
+    let attempt = 0;
+    attempt < 100 && latest?.status !== "succeeded";
+    attempt++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    latest = await readSwitchJob(f.store);
+    if (latest?.status === "failed") break;
+  }
+  assert.equal(latest?.id, job.id);
+  assert.equal(latest?.status, "succeeded", latest?.error);
+  assert.equal(parseAuth((await f.store.activeRaw())!).identity.userId, "b");
+  const output = await run(
+    process.execPath,
+    ["--import", "tsx", "src/cli.ts", "switch-status"],
+    { env: { HOME: f.home, PATH: process.env.PATH }, timeout: 10000 },
+  );
+  assert.equal(JSON.parse(output.stdout).status, "succeeded");
+  assert.doesNotMatch(output.stdout, /FAKE_MANAGEMENT_SECRET|FAKE_REFRESH/);
+});
+
+test("detached worker records a failed switch without replacing auth", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const original = await f.store.activeRaw();
+  await startSwitchWorker(
+    f.home,
+    "missing",
+    { baseUrl: f.server.url, token: "FAKE_MANAGEMENT_SECRET" },
+    path.resolve("src/cli.ts"),
+    ["--import", "tsx"],
+  );
+  let latest = await readSwitchJob(f.store);
+  for (
+    let attempt = 0;
+    attempt < 100 && latest?.status !== "failed";
+    attempt++
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    latest = await readSwitchJob(f.store);
+  }
+  assert.equal(latest?.status, "failed");
+  assert.match(latest?.error ?? "", /^NOT_FOUND:/);
+  assert.equal(await f.store.activeRaw(), original);
 });

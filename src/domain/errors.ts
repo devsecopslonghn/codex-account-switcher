@@ -13,6 +13,7 @@ export type ErrorCode =
   | "FILESYSTEM"
   | "LOCKED"
   | "PROCESS_RUNNING"
+  | "PROCESS_STOP_FAILED"
   | "UNSUPPORTED"
   | "CONFLICT"
   | "CHANGED"
@@ -53,7 +54,9 @@ const messages: Record<ErrorCode, string> = {
   LOCKED:
     "Another account operation holds the lock. Wait for it to finish; do not delete the lock file.",
   PROCESS_RUNNING:
-    "Codex appears to be running. Close CLI and IDE Codex processes, or use 'use <selector> --force' to restart the managed background server after switching. Rollback still requires them to stop.",
+    "Codex appears to be running. The default use command stops matching local sessions before switching. Rollback still requires them to stop.",
+  PROCESS_STOP_FAILED:
+    "Codex sessions could not be stopped or stayed active. The account file was not replaced; close those sessions and retry.",
   UNSUPPORTED:
     "Safe process detection and locking currently require Linux with /proc and util-linux flock.",
   CONFLICT:
@@ -63,7 +66,7 @@ const messages: Record<ErrorCode, string> = {
   DURABILITY:
     "A local file was renamed but its directory could not be flushed. Inspect local state before retrying.",
   COMMITTED:
-    "Auth replacement committed, but final state bookkeeping failed. Inspect current before retrying; rollback is available.",
+    "Auth replacement committed, but a final state or process check failed. Inspect current before retrying; rollback is available.",
   NO_BACKUP: "No valid distinct backup is available for rollback.",
   SETUP_REQUIRED:
     "Interactive setup requires a terminal. Run codex-account setup in a terminal.",

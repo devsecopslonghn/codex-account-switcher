@@ -147,16 +147,54 @@ test("Codex process at start or immediately before replace prevents switching", 
   );
   assert.equal(await f.store.activeRaw(), raw);
 });
-test("explicit force skips only the running-process guard and reports the live-session risk", async (t) => {
+test("explicit force permits a running process and reports session termination", async (t) => {
   const f = await setup();
   t.after(f.cleanup);
-  const engine = new Engine(f.store, f.client, async () => true);
-  const result = await engine.use("B", true);
+  let running = true;
+  const engine = new Engine(f.store, f.client, async () => running);
+  const result = await engine.use("B", true, async () => {
+    running = false;
+    return { terminated: 1 };
+  });
   assert.equal(result.action, "use");
   assert.equal(result.connectionId, "B");
-  assert.match(result.warnings.join("\n"), /FORCED_SWITCH.*background server/);
+  assert.match(result.warnings.join("\n"), /FORCED_SWITCH.*terminated/);
+  assert.equal(result.sessions?.terminated, 2);
   assert.equal(parseAuth((await f.store.activeRaw())!).identity.userId, "b");
   assert.ok((await f.store.backups()).length > 0);
+});
+test("forced switch stops sessions before replacing auth; stop failure preserves it", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const original = await f.store.activeRaw();
+  const engine = new Engine(f.store, f.client, async () => true);
+  let stopCalls = 0;
+  await assert.rejects(
+    engine.use("B", true, async () => {
+      stopCalls++;
+      assert.equal(await f.store.activeRaw(), original);
+      throw new AppError("PROCESS_STOP_FAILED");
+    }),
+    code("PROCESS_STOP_FAILED"),
+  );
+  assert.equal(stopCalls, 1);
+  assert.equal(await f.store.activeRaw(), original);
+});
+test("rotation during session shutdown is preserved instead of overwritten", async (t) => {
+  const f = await setup();
+  t.after(f.cleanup);
+  const rotated = fakeAuth("a", 2);
+  await assert.rejects(
+    f.engine.use("B", true, async () => {
+      await fs.writeFile(f.store.authPath, serialize(rotated));
+      return { terminated: 1 };
+    }),
+    code("CHANGED"),
+  );
+  assert.equal(
+    parseAuth((await f.store.activeRaw())!).fingerprint,
+    rotated.fingerprint,
+  );
 });
 test("force still rejects a concurrent change to active auth", async (t) => {
   const f = await setup();
@@ -166,7 +204,11 @@ test("force still rejects a concurrent change to active auth", async (t) => {
     await fs.writeFile(f.store.authPath, serialize(rotated));
   };
   await assert.rejects(
-    new Engine(f.store, f.client, async () => true).use("B", true),
+    new Engine(f.store, f.client, async () => true).use(
+      "B",
+      true,
+      async () => ({ terminated: 0 }),
+    ),
     code("CHANGED"),
   );
   assert.equal(
