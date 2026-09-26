@@ -1,6 +1,17 @@
 # Release maintenance
 
-The `Release` GitHub Actions workflow publishes `@devsecopslonghn/codex-account-switcher` to the public npm registry with provenance, then attaches the prebuilt tarball and SHA-256 checksum to GitHub Releases. npm publishing uses trusted publishing (GitHub Actions OIDC), not a long-lived npm token. The npm package scope is an npm organization and must be created separately from the GitHub organization. In npm package settings, configure a trusted publisher for GitHub Actions with owner `devsecopslonghn`, repository `codex-account-switcher`, workflow file `release.yml`, and no environment. The first publish and trusted-publisher setup require an npm account with permission to manage that npm organization/package. The workflow also needs `contents: write` to create the GitHub Release. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [GitHub workflow permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax).
+The `Release` GitHub Actions workflow publishes `@devsecopslonghn/codex-account-switcher` to the public npm registry with provenance, then attaches the prebuilt tarball and SHA-256 checksum to GitHub Releases. npm publishing uses trusted publishing (GitHub Actions OIDC), not a long-lived npm token. The npm package scope is an npm organization and must be created separately from the GitHub organization. The first package version must be bootstrapped by an npm organization maintainer; after the package exists, configure its trusted publisher for GitHub Actions with owner `devsecopslonghn`, repository `codex-account-switcher`, workflow file `release.yml`, no environment, and permission for direct `npm publish`. The next new version can then be published by GitHub Actions without an npm token. The workflow also needs `contents: write` to create the GitHub Release. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [GitHub workflow permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax).
+
+For the initial setup, create an npm user account and an npm organization named `devsecopslonghn`, then bootstrap the current package version (`1.0.1`) once from a trusted maintainer machine:
+
+```sh
+npm login
+npm run check
+npm run release:pack
+npm publish --access public
+```
+
+Do not create the `v1.0.1` GitHub tag for this bootstrap version: npm does not allow publishing the same version twice. Configure the package's trusted publisher in npm settings, then publish a later version (for example `1.0.2`) from a new tag using the workflow below. Trusted publishing requires npm CLI 11.5.1+ and Node 22.14+; the workflow uses Node 24. See npm's instructions for [creating an npm account and organization-scoped package](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/).
 
 The tarball contains `dist/`, README/docs/systemd templates, package metadata, and bundled `smol-toml`. npm's [`bundleDependencies`](https://docs.npmjs.com/cli/v11/configuring-npm/package-json#bundledependencies) means consumers do not need build tools. Node/npm and Linux system tools remain prerequisites. Auth files, account caches, local configuration, source tests, and dev dependencies are excluded.
 
