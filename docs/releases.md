@@ -10,7 +10,7 @@ Before publishing, choose a license for public users if you intend to grant them
 
 ### 2. Bootstrap the first npm version
 
-npm must have a package record before its package settings can be used to add a Trusted Publisher. On a maintainer machine with Node 24, clone the public repo and publish the current package version (`1.0.1`) once:
+This repository's first npm version, `1.0.1`, has already been published and verified. Do not repeat the bootstrap or publish `1.0.1` again. For a new package/scope in the future, npm must have a package record before its package settings can be used to add a Trusted Publisher. On a maintainer machine with Node 24, clone the repo and publish that package's initial version once:
 
 ```sh
 git clone https://github.com/devsecopslonghn/codex-account-switcher.git
@@ -21,7 +21,7 @@ npm run release:pack
 npm publish --access public
 ```
 
-Do not push a `v1.0.1` tag for the bootstrap version: npm does not allow publishing the same version twice.
+Do not push a Git tag for an initial version published manually: npm does not allow publishing the same version twice.
 
 ### 3. Add npm's Trusted Publisher
 
@@ -43,7 +43,7 @@ The repository is already under `devsecopslonghn`, and its workflow already decl
 
 ### 5. Publish subsequent versions from a Git tag
 
-After the bootstrap `1.0.1` package exists and the Trusted Publisher is configured, publish the next version through Actions. For example:
+After `1.0.1` exists and the Trusted Publisher is configured, publish the next version through Actions. For example:
 
 ```sh
 npm version patch --no-git-tag-version
