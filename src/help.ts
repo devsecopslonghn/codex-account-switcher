@@ -98,7 +98,8 @@ const commands: Record<CommandName, CommandHelp> = {
     notes: [
       "Email is a selector, not the internal userId used to verify account identity.",
       "Normally close Codex CLI and IDE sessions before switching.",
-      "With -f/--force, a running session may keep the old account or later overwrite auth.json. Restart every Codex session after switching and check 'codex-account current' again.",
+      "With -f/--force, the managed Codex background server restarts automatically after a successful switch. Active tasks may be interrupted; independent IDE sessions may still need a restart.",
+      "If the background server cannot be restarted, the command reports a committed local switch and exits with status 1.",
       "File, identity, lock, and backup checks remain enabled with force.",
     ],
   },

@@ -154,7 +154,7 @@ test("explicit force skips only the running-process guard and reports the live-s
   const result = await engine.use("B", true);
   assert.equal(result.action, "use");
   assert.equal(result.connectionId, "B");
-  assert.match(result.warnings.join("\n"), /FORCED_SWITCH.*Restart/);
+  assert.match(result.warnings.join("\n"), /FORCED_SWITCH.*background server/);
   assert.equal(parseAuth((await f.store.activeRaw())!).identity.userId, "b");
   assert.ok((await f.store.backups()).length > 0);
 });

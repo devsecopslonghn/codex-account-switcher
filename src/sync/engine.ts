@@ -16,10 +16,11 @@ export interface Report {
   action: string;
   connectionId?: string;
   warnings: string[];
+  daemon?: "not-running" | "restarted" | "failed";
   failures?: { connectionId: string; error: string }[];
 }
 const runningWarning =
-  "FORCED_SWITCH: Running Codex processes may keep the previous account in memory or later refresh and overwrite auth.json. Restart all Codex CLI and IDE sessions before using the selected account.";
+  "FORCED_SWITCH: Running Codex processes may keep the previous account in memory or later refresh and overwrite auth.json. The managed background server will be restarted if available; restart independent IDE sessions before using the selected account.";
 export class Engine {
   constructor(
     readonly store: Store,

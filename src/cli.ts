@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { checkCodexConfig, loadConfig } from "./config.js";
 import { safeError, AppError } from "./domain/errors.js";
 import { Store } from "./local/store.js";
+import { refreshCodexDaemon } from "./local/daemon.js";
 import { Client, type Vault } from "./omniroute/client.js";
 import { Engine } from "./sync/engine.js";
 import { current, doctor, list } from "./commands.js";
@@ -123,6 +124,15 @@ async function main(): Promise<void> {
       command === "use"
         ? await engine.use(selectors[0]!, force)
         : await engine.sync(command === "sync-all");
+  if (command === "use") {
+    r.daemon = await refreshCodexDaemon();
+    if (r.daemon === "failed") {
+      r.warnings.push(
+        "CODEX_DAEMON: Local auth was updated, but the Codex background server could not be restarted. Its running sessions may still use the previous account.",
+      );
+      process.exitCode = 1;
+    }
+  }
   process.stdout.write(safeOutput(r) + "\n");
   if (r.failures?.length) process.exitCode = 1;
 }
