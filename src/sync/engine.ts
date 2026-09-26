@@ -66,6 +66,7 @@ export class Engine {
     if(active?.id===target.id)return {action:'already-active',connectionId:target.id,warnings};
     let auth:ParsedAuth;
     try {auth=await this.pull(target,state,connections);} catch(e) {state.accounts[target.id]={...state.accounts[target.id],status:e instanceof AppError&&e.code==='REAUTH_REQUIRED'?'REAUTH_REQUIRED':e instanceof AppError&&e.code==='CONFLICT'?'CONFLICT':'UNKNOWN'};await this.store.saveState(state);throw e;}
+    if(auth.expiresAt && Date.parse(auth.expiresAt)<=Date.now())throw new AppError('REFRESH_FAILED');
     await this.unchanged(raw); if(raw!==undefined)await this.store.backup(raw);
     await this.store.replace(serialize(auth),raw,()=>this.stopped());
     try {if(active && state.accounts[active.id])state.accounts[active.id]!.status='AVAILABLE';state.activeConnectionId=target.id;state.accounts[target.id]!.status='ACTIVE_LOCAL';await this.store.saveState(state);} catch {throw new AppError('COMMITTED');}
