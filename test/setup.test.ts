@@ -240,6 +240,7 @@ test("hidden input does not echo and restores terminal mode", async () => {
   input.write(`${token}\r`);
   assert.equal(await result, token);
   assert.equal(raw, false);
+  assert.equal(input.isPaused(), true);
   assert.ok(!shown.includes(token));
 });
 

@@ -13,6 +13,7 @@ export function promptHidden(
     const finish = (error?: Error) => {
       input.off("data", onData);
       input.off("end", onEnd);
+      input.pause();
       input.setRawMode(wasRaw);
       output.write("\n");
       if (error) reject(error);
