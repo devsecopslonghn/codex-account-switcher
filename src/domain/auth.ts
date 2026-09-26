@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { rememberSecret } from '../output.js';
 import { AppError } from './errors.js';
 export function record(value: unknown): Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 export function str(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim() : undefined; }
@@ -19,6 +20,7 @@ export function parseAuth(input: unknown): ParsedAuth {
   if (doc.OPENAI_API_KEY !== undefined && doc.OPENAI_API_KEY !== null) throw new AppError('INVALID_AUTH');
   const id = str(t.id_token), access = str(t.access_token), refresh = str(t.refresh_token);
   if (!id || !access || !refresh || [id, access, refresh].some(v => v.length > 100000 || /\s/.test(v))) throw new AppError('INVALID_AUTH');
+  [id,access,refresh].forEach(rememberSecret);
   const ic = claims(id), ac = claims(access), ia = record(ic['https://api.openai.com/auth']), aa = record(ac['https://api.openai.com/auth']);
   const fromClaim = str(ia.chatgpt_account_id) ?? str(ia.account_id);
   const workspaceId = str(t.account_id) ?? fromClaim;
