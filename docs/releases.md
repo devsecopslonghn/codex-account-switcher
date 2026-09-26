@@ -72,7 +72,7 @@ git commit -m "chore: bump release version"
 # Use the version now recorded in package.json, for example:
 git tag -a v1.0.2 -m "Release v1.0.2"
 git push origin main
-git push origin v1.0.1
+git push origin v1.0.2
 ```
 
 Use `minor` or `major` instead of `patch` as appropriate. Tag and `package.json` versions must match exactly. The CLI reads its version from the package metadata, so no source constant needs updating. Current automation supports stable `vX.Y.Z` tags, not prereleases.

@@ -9,55 +9,70 @@ import { Engine } from "./sync/engine.js";
 import { current, doctor, list } from "./commands.js";
 import { safeOutput } from "./output.js";
 import { isConfigured, setupInteractive } from "./setup.js";
-const help = `codex-account — official Codex OAuth account manager\n\nCommands:\n  setup                      Save URL and admin token in an encrypted local vault\n  list                       List OmniRoute Codex OAuth accounts\n  current                    Show active local identity and sync status\n  sync                       Push authoritative active auth to OmniRoute\n  sync-all                   Push active auth; pull inactive account caches\n  use <selector> [--force]   Switch by unique ID, ID prefix, name, or email\n  rollback                   Restore latest valid distinct backup (offline)\n  doctor                     Check configuration, auth, permissions, connectivity, locks\n\nOnly ~/.codex/auth.json switches. Close Codex before use/rollback.\nUse --force only if you accept that running Codex processes may retain or overwrite old credentials; restart them after switching.\nRun codex-account setup once; later commands reuse a session key, or ask for the vault passphrase.\nExplicit credential helpers and secret-manager environment injection also work.\nNo token command-line arguments are accepted. See README for setup.\n`;
-const useHelp = `Usage: codex-account use <selector> [--force]\n\nChoose a connection by full ID, unique ID prefix, name, or email. Use the full ID to avoid ambiguity.\nNormally all Codex CLI and IDE processes must be closed first.\n--force bypasses only the running-process check. A live Codex process may continue using the old account or refresh and overwrite auth.json after the switch. Restart all Codex sessions immediately afterward. File, identity, lock, and backup checks still apply.\n`;
+import {
+  commandHelp,
+  globalHelp,
+  isCommandName,
+  isHelpFlag,
+  type CommandName,
+} from "./help.js";
+
+function usageError(command?: CommandName): void {
+  const hint = command
+    ? `codex-account ${command} --help`
+    : "codex-account --help";
+  process.stderr.write(`USAGE: Invalid command or arguments. Run '${hint}'.\n`);
+  process.exitCode = 2;
+}
+
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (command === "--help" || command === "help") {
-    process.stdout.write(help);
+  if (command === "help" || isHelpFlag(command ?? "")) {
+    if (args.length === 0) process.stdout.write(globalHelp());
+    else if (args.length === 1 && isCommandName(args[0]!))
+      process.stdout.write(commandHelp(args[0]!));
+    else usageError();
     return;
   }
-  if (command === "--version") {
+  if (command === "--version" || command === "-V") {
+    if (args.length !== 0) return usageError();
     const metadata = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     ) as { version: string };
     process.stdout.write(`${metadata.version}\n`);
     return;
   }
-  if (command === "use" && args.length === 1 && args[0] === "--help") {
-    process.stdout.write(useHelp);
+  if (
+    command &&
+    isCommandName(command) &&
+    args.length === 1 &&
+    isHelpFlag(args[0]!)
+  ) {
+    process.stdout.write(commandHelp(command));
     return;
   }
   const home = os.homedir();
   if (!command) {
-    if (await isConfigured(home)) process.stdout.write(help);
+    if (await isConfigured(home)) process.stdout.write(globalHelp());
     else process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
     return;
   }
+  if (!isCommandName(command)) return usageError();
+  const forceFlags = args.filter((arg) => arg === "--force" || arg === "-f");
+  const selectors = args.filter((arg) => arg !== "--force" && arg !== "-f");
+  if (
+    command === "use"
+      ? selectors.length !== 1 ||
+        selectors[0]!.startsWith("-") ||
+        forceFlags.length > 1
+      : args.length !== 0
+  )
+    return usageError(command);
   if (command === "setup" && args.length === 0) {
     process.stdout.write(safeOutput(await setupInteractive(home)) + "\n");
     return;
   }
-  const force = command === "use" && args.includes("--force");
-  const selectors =
-    command === "use" ? args.filter((arg) => arg !== "--force") : [];
-  if (
-    ![
-      "list",
-      "current",
-      "sync",
-      "sync-all",
-      "use",
-      "rollback",
-      "doctor",
-    ].includes(command) ||
-    (command === "use"
-      ? selectors.length !== 1 ||
-        selectors[0]!.startsWith("-") ||
-        args.length !== selectors.length + Number(force)
-      : args.length !== 0)
-  )
-    throw new AppError("CONFIG");
+  const force = forceFlags.length === 1;
   const store = new Store(home),
     getVault = async () => new Client(await loadConfig(home));
   if (command === "doctor") {
